@@ -21,14 +21,14 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 # --- Pydantic 모델 정의 ---
-class UserCreate(BaseModel): #
-    username: str = Field(..., min_length=1, description="새 사용자의 사용자 이름") #
-    password: str = Field(..., min_length=6, description="새 사용자의 비밀번호 (최소 6자)") #
+class UserCreate(BaseModel): # 사용자 생성을 위한 요청 본문 모델
+    username: str = Field(..., min_length=1, description="새 사용자의 사용자 이름")
+    password: str = Field(..., min_length=6, description="새 사용자의 비밀번호 (최소 6자)")
 
-class UserResponse(BaseModel): #
+class UserResponse(BaseModel): # 사용자 목록 조회를 위한 응답 모델
     users: list[str]
 
-class MessageResponse(BaseModel): #
+class MessageResponse(BaseModel): # 일반 메시지 응답을 위한 모델
     message: str
 
 # --- API 엔드포인트 ---
@@ -39,23 +39,25 @@ class MessageResponse(BaseModel): #
     description="htpasswd 파일에서 모든 사용자 이름 목록을 가져옵니다.\n\n관리자만 접근 가능합니다."
 )
 async def list_users(
-    request: Request,
-    admin_user: str = Depends(get_current_admin_user),
-    htpasswd_service: HtpasswdService = Depends(get_htpasswd_service) # 서비스 주입
+    request: Request, # 감사 로그 및 클라이언트 정보 로깅을 위한 Request 객체
+    admin_user: str = Depends(get_current_admin_user), # 관리자 인증 의존성
+    htpasswd_service: HtpasswdService = Depends(get_htpasswd_service) # Htpasswd 서비스 의존성 주입
 ):
-    client_ip = request.client.host if request.client else "Unknown"
-    action_details = {"path": request.url.path}
+    client_ip = request.client.host if request.client else "Unknown" # 클라이언트 IP 주소 가져오기
+    action_details = {"path": request.url.path} # 감사 로그 상세 정보
 
     try:
-        users = htpasswd_service.list_users()
+        users = htpasswd_service.list_users() # Htpasswd 서비스를 통해 사용자 목록 조회
         logger.info(f"Admin '{admin_user}' (IP: {client_ip}) listed users (count: {len(users)}).")
+        # 성공 감사 로그 기록
         await log_audit_event(AuditLogDBCreate(
             username=admin_user, action=AuditAction.USER_LIST, client_ip=client_ip,
             status="SUCCESS", details={**action_details, "listed_user_count": len(users)}
         ))
         return {"users": users}
-    except HtpasswdFileAccessError as e:
+    except HtpasswdFileAccessError as e: # htpasswd 파일 접근 오류 처리
         logger.error(f"Admin '{admin_user}' (IP: {client_ip}) failed to list users: {e}")
+        # 실패 감사 로그 기록
         await log_audit_event(AuditLogDBCreate(
             username=admin_user, action=AuditAction.USER_LIST_ATTEMPT, client_ip=client_ip,
             status="FAILURE", details={**action_details, "reason": f"User database (htpasswd file) access error: {e}"}
@@ -66,6 +68,7 @@ async def list_users(
         )
     except Exception as e: # HtpasswdService 내부의 다른 예외 또는 기타 예외
         logger.error(f"Admin '{admin_user}' (IP: {client_ip}) encountered an unexpected error listing users: {e}", exc_info=True)
+        # 실패 감사 로그 기록
         await log_audit_event(AuditLogDBCreate(
             username=admin_user, action=AuditAction.USER_LIST_ATTEMPT, client_ip=client_ip,
             status="FAILURE", details={**action_details, "reason": f"Unexpected error: {str(e)}"}
@@ -78,35 +81,39 @@ async def list_users(
 
 @router.post(
     "",
-    status_code=status.HTTP_201_CREATED,
+    status_code=status.HTTP_201_CREATED, # 성공 시 201 Created 상태 코드 반환
     response_model=MessageResponse,
     summary="새 사용자 생성",
     description="htpasswd 파일에 새 사용자를 생성합니다.\n\n관리자만 접근 가능합니다.\n비밀번호는 bcrypt로 해시됩니다."
 )
 async def create_user(
-    request: Request,
-    user_data: UserCreate,
-    admin_user: str = Depends(get_current_admin_user),
-    htpasswd_service: HtpasswdService = Depends(get_htpasswd_service) # 서비스 주입
+    request: Request, # 감사 로그 및 클라이언트 정보 로깅
+    user_data: UserCreate, # 요청 본문에서 사용자 생성 정보 받기
+    admin_user: str = Depends(get_current_admin_user), # 관리자 인증
+    htpasswd_service: HtpasswdService = Depends(get_htpasswd_service) # Htpasswd 서비스 주입
 ):
     client_ip = request.client.host if request.client else "Unknown"
     action_details = {"path": request.url.path, "target_username": user_data.username}
 
     try:
+        # 사용자가 이미 존재하는지 확인
         if htpasswd_service.user_exists(user_data.username):
             logger.warning(f"Admin '{admin_user}' (IP: {client_ip}) attempted to create existing user '{user_data.username}'.")
+            # 실패 감사 로그 기록 (사용자 이미 존재)
             await log_audit_event(AuditLogDBCreate(
                 username=admin_user, action=AuditAction.USER_CREATE_ATTEMPT, client_ip=client_ip,
                 resource_type="user", resource_name=user_data.username, status="FAILURE",
                 details={**action_details, "reason": f"User '{user_data.username}' already exists."}
             ))
             raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
+                status_code=status.HTTP_409_CONFLICT, # 이미 존재하는 리소스
                 detail=f"사용자 '{user_data.username}'는(은) 이미 존재합니다."
             )
 
-        htpasswd_service.add_user(user_data.username, user_data.password) # 서비스 호출
+        # Htpasswd 서비스를 통해 사용자 추가
+        htpasswd_service.add_user(user_data.username, user_data.password)
         logger.info(f"User '{user_data.username}' created successfully by admin '{admin_user}'.")
+        # 성공 감사 로그 기록
         await log_audit_event(AuditLogDBCreate(
             username=admin_user, action=AuditAction.USER_CREATE, client_ip=client_ip,
             resource_type="user", resource_name=user_data.username, status="SUCCESS",
@@ -114,9 +121,12 @@ async def create_user(
         ))
         return {"message": f"사용자 '{user_data.username}'이(가) 성공적으로 생성되었습니다."}
 
-    except (HtpasswdCommandError, HtpasswdError) as e: # htpasswd 명령어 관련 오류
+    except HTTPException: # 이미 처리된 HTTPException은 그대로 다시 발생
+        raise
+    except (HtpasswdCommandError, HtpasswdError) as e: # htpasswd 명령어 관련 오류 처리
         error_reason = str(e.stderr) if isinstance(e, HtpasswdCommandError) and e.stderr else str(e)
         logger.error(f"Failed to create user '{user_data.username}' by admin '{admin_user}'. Error: {error_reason}")
+        # 실패 감사 로그 기록
         await log_audit_event(AuditLogDBCreate(
             username=admin_user, action=AuditAction.USER_CREATE_ATTEMPT, client_ip=client_ip,
             resource_type="user", resource_name=user_data.username, status="FAILURE",
@@ -126,8 +136,9 @@ async def create_user(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"사용자 생성 실패: {error_reason}"
         )
-    except HtpasswdUtilityNotFoundError as e: # htpasswd 유틸리티 없음
+    except HtpasswdUtilityNotFoundError as e: # htpasswd 유틸리티 찾을 수 없음 오류 처리
         logger.error(f"htpasswd command not found when admin '{admin_user}' tried to create user '{user_data.username}'. Error: {e}")
+        # 실패 감사 로그 기록
         await log_audit_event(AuditLogDBCreate(
             username=admin_user, action=AuditAction.USER_CREATE_ATTEMPT, client_ip=client_ip,
             resource_type="user", resource_name=user_data.username, status="FAILURE",
@@ -137,8 +148,9 @@ async def create_user(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"서버 설정 오류: {e}"
         )
-    except HtpasswdFileAccessError as e: # htpasswd 파일 접근 오류
+    except HtpasswdFileAccessError as e: # htpasswd 파일 접근 오류 처리
         logger.error(f"Admin '{admin_user}' (IP: {client_ip}) failed to create user '{user_data.username}': {e}")
+        # 실패 감사 로그 기록
         await log_audit_event(AuditLogDBCreate(
             username=admin_user, action=AuditAction.USER_CREATE_ATTEMPT, client_ip=client_ip,
             resource_type="user", resource_name=user_data.username, status="FAILURE",
@@ -148,8 +160,9 @@ async def create_user(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"사용자 데이터베이스 처리 중 오류: {e}"
         )
-    except Exception as e:
+    except Exception as e: # 그 외 예상치 못한 모든 예외 처리
         logger.error(f"Unexpected error creating user '{user_data.username}' by admin '{admin_user}': {e}", exc_info=True)
+        # 실패 감사 로그 기록
         await log_audit_event(AuditLogDBCreate(
             username=admin_user, action=AuditAction.USER_CREATE_ATTEMPT, client_ip=client_ip,
             resource_type="user", resource_name=user_data.username, status="FAILURE",
@@ -168,41 +181,47 @@ async def create_user(
     description="htpasswd 파일에서 사용자를 삭제합니다.\n\n관리자만 접근 가능합니다.\n관리자는 자기 자신을 삭제할 수 없습니다."
 )
 async def delete_user(
-    request: Request,
-    username_to_delete: str,
-    admin_user: str = Depends(get_current_admin_user),
-    htpasswd_service: HtpasswdService = Depends(get_htpasswd_service) # 서비스 주입
+    request: Request, # 감사 로그 및 클라이언트 정보 로깅
+    username_to_delete: str, # 경로 파라미터로 삭제할 사용자 이름 받기
+    admin_user: str = Depends(get_current_admin_user), # 관리자 인증
+    htpasswd_service: HtpasswdService = Depends(get_htpasswd_service) # Htpasswd 서비스 주입
 ):
     client_ip = request.client.host if request.client else "Unknown"
     action_details = {"path": request.url.path, "target_username": username_to_delete}
 
     try:
+        # 삭제할 사용자가 존재하는지 확인
         if not htpasswd_service.user_exists(username_to_delete):
             logger.warning(f"Admin '{admin_user}' (IP: {client_ip}) attempted to delete non-existing user '{username_to_delete}'.")
+            # 실패 감사 로그 기록 (사용자 없음)
             await log_audit_event(AuditLogDBCreate(
                 username=admin_user, action=AuditAction.USER_DELETE_ATTEMPT, client_ip=client_ip,
                 resource_type="user", resource_name=username_to_delete, status="FAILURE",
                 details={**action_details, "reason": f"User '{username_to_delete}' not found."}
             ))
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
+                status_code=status.HTTP_404_NOT_FOUND, # 리소스를 찾을 수 없음
                 detail=f"사용자 '{username_to_delete}'을(를) 찾을 수 없습니다."
             )
 
+        # 관리자가 자기 자신을 삭제하려는 경우 방지
         if username_to_delete == admin_user:
             logger.warning(f"Admin '{admin_user}' (IP: {client_ip}) attempted to delete themselves ('{username_to_delete}').")
+            # 실패 감사 로그 기록 (자기 자신 삭제 시도)
             await log_audit_event(AuditLogDBCreate(
                 username=admin_user, action=AuditAction.USER_DELETE_ATTEMPT, client_ip=client_ip,
                 resource_type="user", resource_name=username_to_delete, status="FAILURE",
                 details={**action_details, "reason": "Admins cannot delete themselves."}
             ))
             raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
+                status_code=status.HTTP_403_FORBIDDEN, # 접근 금지
                 detail="관리자는 자기 자신을 삭제할 수 없습니다."
             )
 
-        htpasswd_service.delete_user(username_to_delete) # 서비스 호출
+        # Htpasswd 서비스를 통해 사용자 삭제
+        htpasswd_service.delete_user(username_to_delete)
         logger.info(f"User '{username_to_delete}' deleted successfully by admin '{admin_user}'.")
+        # 성공 감사 로그 기록
         await log_audit_event(AuditLogDBCreate(
             username=admin_user, action=AuditAction.USER_DELETE, client_ip=client_ip,
             resource_type="user", resource_name=username_to_delete, status="SUCCESS",
@@ -210,9 +229,12 @@ async def delete_user(
         ))
         return {"message": f"사용자 '{username_to_delete}'이(가) 성공적으로 삭제되었습니다."}
 
-    except (HtpasswdCommandError, HtpasswdError) as e: # htpasswd 명령어 관련 오류
+    except HTTPException: # 이미 처리된 HTTPException은 그대로 다시 발생시켜 FastAPI가 처리하도록 함
+        raise
+    except (HtpasswdCommandError, HtpasswdError) as e: # htpasswd 명령어 관련 오류 처리
         error_reason = str(e.stderr) if isinstance(e, HtpasswdCommandError) and e.stderr else str(e)
         logger.error(f"Failed to delete user '{username_to_delete}' by admin '{admin_user}'. Error: {error_reason}")
+        # 실패 감사 로그 기록
         await log_audit_event(AuditLogDBCreate(
             username=admin_user, action=AuditAction.USER_DELETE_ATTEMPT, client_ip=client_ip,
             resource_type="user", resource_name=username_to_delete, status="FAILURE",
@@ -222,8 +244,9 @@ async def delete_user(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"사용자 삭제 실패: {error_reason}"
         )
-    except HtpasswdUtilityNotFoundError as e: # htpasswd 유틸리티 없음
+    except HtpasswdUtilityNotFoundError as e: # htpasswd 유틸리티 찾을 수 없음 오류 처리
         logger.error(f"htpasswd command not found when admin '{admin_user}' tried to delete user '{username_to_delete}'. Error: {e}")
+        # 실패 감사 로그 기록
         await log_audit_event(AuditLogDBCreate(
             username=admin_user, action=AuditAction.USER_DELETE_ATTEMPT, client_ip=client_ip,
             resource_type="user", resource_name=username_to_delete, status="FAILURE",
@@ -233,8 +256,9 @@ async def delete_user(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"서버 설정 오류: {e}"
         )
-    except HtpasswdFileAccessError as e: # htpasswd 파일 접근 오류
+    except HtpasswdFileAccessError as e: # htpasswd 파일 접근 오류 처리
         logger.error(f"Admin '{admin_user}' (IP: {client_ip}) failed to delete user '{username_to_delete}': {e}")
+        # 실패 감사 로그 기록
         await log_audit_event(AuditLogDBCreate(
             username=admin_user, action=AuditAction.USER_DELETE_ATTEMPT, client_ip=client_ip,
             resource_type="user", resource_name=username_to_delete, status="FAILURE",
@@ -244,8 +268,9 @@ async def delete_user(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"사용자 데이터베이스 처리 중 오류: {e}"
         )
-    except Exception as e:
+    except Exception as e: # 그 외 예상치 못한 모든 예외 처리
         logger.error(f"Unexpected error deleting user '{username_to_delete}' by admin '{admin_user}': {e}", exc_info=True)
+        # 실패 감사 로그 기록 (HTTPException이 아닌 경우에만)
         await log_audit_event(AuditLogDBCreate(
             username=admin_user, action=AuditAction.USER_DELETE_ATTEMPT, client_ip=client_ip,
             resource_type="user", resource_name=username_to_delete, status="FAILURE",

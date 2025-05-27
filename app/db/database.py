@@ -13,7 +13,13 @@ DATABASE_URL = settings.AUDIT_DATABASE_URL #
 
 # SQLAlchemy 엔진 생성
 # connect_args={"check_same_thread": False}는 SQLite를 사용할 때 FastAPI(Starlette)의 비동기 환경에서 필요합니다.
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False}) #
+engine = create_engine(
+    DATABASE_URL,
+    connect_args={
+        "check_same_thread": False,
+        "timeout": 15  # SQLite busy_timeout을 15초로 설정 (기본값은 5초)
+    }
+)
 
 # 메타데이터 객체 생성
 metadata = MetaData() #
