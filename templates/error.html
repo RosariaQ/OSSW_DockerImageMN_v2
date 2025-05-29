@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>오류: {{ title | default('오류 발생') }}</h2>
+<div class="error-message">
+    <p>{{ error_message | default('알 수 없는 오류가 발생했습니다.') }}</p>
+</div>
+{# 홈으로 돌아가는 링크 (나중에 라우트 이름으로 변경) #}
+<p><a href="/web/">홈페이지로 돌아가기</a></p>
+{% endblock %}

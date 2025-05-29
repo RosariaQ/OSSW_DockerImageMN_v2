@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>사용자 관리</h2>
+<p>현재 로그인한 관리자: <strong>{{ current_user }}</strong></p>
+
+{# 성공 또는 오류 메시지 표시 #}
+{% if message %}
+    <div class="success-message">{{ message }}</div>
+{% endif %}
+{% if error %}
+    <div class="error-message">{{ error }}</div>
+{% endif %}
+
+<hr>
+
+<h3>새 사용자 추가</h3>
+<form action="{{ url_for('create_user_web_ui') }}" method="post">
+    <div>
+        <label for="username">사용자 이름:</label>
+        <input type="text" id="username" name="username" required minlength="1">
+    </div>
+    <div style="margin-top: 10px;">
+        <label for="password">비밀번호 (6자 이상):</label>
+        <input type="password" id="password" name="password" required minlength="6">
+    </div>
+    <div style="margin-top: 15px;">
+        <button type="submit">새 사용자 생성</button>
+    </div>
+</form>
+
+<hr style="margin-top: 30px; margin-bottom: 30px;">
+
+<h3>기존 사용자 목록</h3>
+{% if users %}
+    <table>
+        <thead>
+            <tr>
+                <th>사용자 이름</th>
+                <th>작업</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for u_name in users %}
+            <tr>
+                <td>{{ u_name }}</td>
+                <td>
+                    {% if u_name != current_user and u_name not in settings.ADMIN_USERNAMES %}
+                        {# 사용자 삭제 폼 #}
+                        <form action="{{ url_for('delete_user_web_ui', username_to_delete=u_name) }}" method="post" style="display:inline;" onsubmit="return confirm('정말로 사용자 \'{{ u_name }}\'을(를) 삭제하시겠습니까?');">
+                            <button type="submit" class="button delete">삭제</button>
+                        </form>
+                    {% elif u_name == current_user %}
+                        (현재 관리자)
+                    {% elif u_name in settings.ADMIN_USERNAMES %}
+                        (다른 관리자)
+                    {% else %}
+                        {# 이 경우는 발생하지 않아야 하지만, 예외 처리 #}
+                        N/A
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+{% else %}
+    <p>등록된 사용자가 없습니다.</p>
+{% endif %}
+
+<p style="margin-top: 20px;"><a href="{{ url_for('read_root_web') }}">&laquo; 홈으로 돌아가기</a></p>
+
+{% endblock %}
