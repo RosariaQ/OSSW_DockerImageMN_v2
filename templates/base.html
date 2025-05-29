@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title | default("나의 Docker 레지스트리") }} - 프라이빗 레지스트리</title>
+    {# app/main.py 에서 설정한 "static" 이름을 사용하여 CSS 파일 경로를 생성합니다. #}
+    <link rel="stylesheet" href="{{ url_for('static', path='/css/styles.css') }}">
+</head>
+<body>
+    <header>
+        <nav>
+            <a href="{{ url_for('read_root_web') }}">홈</a> |
+            <a href="{{ url_for('list_images_web_ui') }}">이미지</a> |
+            <a href="{{ url_for('manage_users_web_ui') }}">사용자 관리</a> |
+            {# 감사 로그 페이지 링크 추가 #}
+            <a href="{{ url_for('view_audit_logs_web_ui') }}">감사 로그</a> |
+            <a href="/docs" target="_blank">API 문서</a>
+            {% if current_user %}
+                <span style="float: right; margin-right: 20px; color: #ccc;">사용자: {{ current_user }}</span>
+            {% endif %}
+        </nav>
+        <h1>{{ title | default("나의 Docker 레지스트리 서비스") }}</h1>
+    </header>
+
+    <main>
+        {# 각 페이지의 실제 내용이 이 블록 안에 채워집니다. #}
+        {% block content %}
+        <p>서비스에 오신 것을 환영합니다. 여기에 콘텐츠가 로드됩니다.</p>
+        {% endblock %}
+    </main>
+
+    <footer>
+        <p>&copy; 2025 나의 프라이빗 Docker 레지스트리 서비스. 버전: {{ app_version }}</p>
+    </footer>
+
+</body>
+</html>

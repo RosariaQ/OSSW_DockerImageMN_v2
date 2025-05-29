@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>'{{ image_name }}' 이미지의 태그 목록</h2>
+
+{% if message %}
+    <div class="success-message">{{ message }}</div>
+{% endif %}
+{% if error %}
+    <div class="error-message">{{ error }}</div>
+{% endif %}
+
+<p><a href="{{ url_for('list_images_web_ui') }}">&laquo; 전체 이미지 목록으로 돌아가기</a></p>
+
+{% if tags %}
+    <table>
+        <thead>
+            <tr>
+                <th>태그</th>
+                <th>작업</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for tag_name in tags %}
+            <tr>
+                <td>{{ tag_name }}</td>
+                <td>
+                    {# 태그 삭제 폼 추가 #}
+                    <form action="{{ url_for('delete_image_tag_web_ui', image_name=image_name, tag_name=tag_name) }}" method="post" style="display:inline;" onsubmit="return confirm('정말로 \'{{ image_name }}:{{ tag_name }}\' 태그를 삭제하시겠습니까?');">
+                        <button type="submit" class="button delete">태그 삭제</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+{% else %}
+    <p>이 이미지 리포지토리에 태그가 없습니다.</p>
+{% endif %}
+{% endblock %}

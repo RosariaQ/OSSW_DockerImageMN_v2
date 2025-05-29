@@ -9,7 +9,7 @@ alias deactivate 'test $?_OLD_VIRTUAL_PATH != 0 && setenv PATH "$_OLD_VIRTUAL_PA
 # Unset irrelevant variables.
 deactivate nondestructive
 
-setenv VIRTUAL_ENV '/home/rosaria01/문서/Cursor/DockerImageMN/v1/DIMNvenv'
+setenv VIRTUAL_ENV '/home/rosaria01/문서/Cursor/DockerImageMN/v2/DIMNvenv'
 
 set _OLD_VIRTUAL_PATH="$PATH"
 setenv PATH "$VIRTUAL_ENV/"bin":$PATH"

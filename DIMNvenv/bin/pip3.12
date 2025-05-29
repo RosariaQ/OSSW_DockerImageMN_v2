@@ -1,4 +1,4 @@
-#!/home/rosaria01/문서/Cursor/DockerImageMN/v1/DIMNvenv/bin/python3
+#!/home/rosaria01/문서/Cursor/DockerImageMN/v2/DIMNvenv/bin/python3
 # -*- coding: utf-8 -*-
 import re
 import sys
